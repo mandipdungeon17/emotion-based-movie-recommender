@@ -67,9 +67,16 @@ All inputs are merged → normalized → compared using a **dot product** agains
 ```
 emotion-based-movie-recommender/
 │
-├── movies_emotions_50.csv      # Movie dataset with emotion vectors
-├── movie_emotion_engine.py     # Single-file recommendation engine
-└── README.md                   # Project documentation
+├── datasets/
+│   └── movies_dataset_500_souj.csv   # Movie dataset with emotion vectors (500 movies)
+├── index.html                        # Web app UI
+├── app.js                            # Web app logic (group recommender)
+├── server.py                         # Local HTTP server for the web app
+├── multi_user_recommender.py         # Multi-user GUI (Tkinter)
+├── movies_emotions_50.csv            # Movie dataset with emotion vectors (legacy)
+├── movie_emotion_engine.py            # Single-file recommendation engine
+├── requirements.txt                  # Optional deps (pandas, numpy for GUI)
+└── README.md                         # Project documentation
 ```
 
 ---
@@ -85,6 +92,58 @@ pip install pandas numpy
 ```bash
 python movie_emotion_engine.py
 ```
+
+---
+
+## 🌐 Web App: Coastal Movies (Group Recommender)
+
+A **web app** for the **multi-user** emotion-based movie recommender. Same logic as `multi_user_recommender.py`, using the dataset `datasets/movies_dataset_500_souj.csv`.
+
+### Dependencies (virtual env)
+
+The web server uses only the **Python standard library**. After activating your venv you do **not** need to install anything to run the web app:
+
+```bash
+.\gropu_rec\Scripts\activate   # or: source gropu_rec/bin/activate on macOS/Linux
+python server.py
+```
+
+If you also run the Tkinter GUI (`multi_user_recommender.py`), install:
+
+```bash
+pip install pandas numpy
+```
+
+See `requirements.txt` for version hints.
+
+### Run the web app
+
+From the project root (with venv activated if you use one):
+
+```bash
+python server.py
+```
+
+Then open **http://localhost:8000** in your browser. The CSV is loaded from `datasets/movies_dataset_500_souj.csv`; the app must be served over HTTP (not opened as a file) so that the dataset can be fetched.
+
+### Web app features
+
+| Feature | Description |
+|--------|-------------|
+| **Coastal Retreat UI** | Teal/mint color palette for a calm, readable interface. |
+| **Dynamic users** | Click **Add user** to add another set of emotion sliders; **Remove** to remove a user (at least one required). |
+| **Emotion sliders** | 0–10 for each user — same 24 emotions as the Python app. |
+| **Reset sliders** | Per user or **Reset all sliders**. |
+| **Preview my top 3** | On each user card, see that user’s top 3 before computing the group. |
+| **Group recommendations** | Per-user **Top 3** with similarity score; **Group Top 3** (averaged); **pairwise cosine similarity** matrix; **consensus coefficient**; **user → group** similarity and overlap with group top 3. |
+
+### Methodology (matches Python)
+
+- **Movie vectors:** Emotion columns from the CSV, row-normalized to unit vectors.
+- **User vectors:** Sliders 0–10 → divide by 10, then unit-normalized.
+- **Similarity:** Cosine (dot product of unit vectors).
+- **Group vector:** Mean of each user’s *non*-unit scaled vector (0–1), then normalized; used for group top 3.
+- **Consensus:** Mean of the upper triangle of the user–user cosine matrix (excluding diagonal).
 
 ---
 

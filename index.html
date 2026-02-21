@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Coastal Movies — Group Emotion Recommender</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=Playfair+Display:wght@600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --deep-teal: #335765;
+      --medium-teal: #74A8A4;
+      --light-sky: #B6D9E0;
+      --light-mint: #DBE2DC;
+      --wood: #7F543D;
+      --bg: #f8faf9;
+      --card-bg: #fff;
+      --text: #2c3e3a;
+      --text-muted: #5a6e69;
+      --radius: 12px;
+      --radius-sm: 8px;
+      --shadow: 0 4px 20px rgba(51, 87, 101, 0.08);
+      --shadow-hover: 0 8px 28px rgba(51, 87, 101, 0.12);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: 'DM Sans', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      line-height: 1.5;
+    }
+
+    .app-header {
+      background: linear-gradient(135deg, var(--deep-teal) 0%, #3d6572 100%);
+      color: white;
+      padding: 1.25rem 1.5rem;
+      box-shadow: var(--shadow);
+    }
+
+    .app-header h1 {
+      margin: 0;
+      font-family: 'Playfair Display', serif;
+      font-size: 1.75rem;
+      font-weight: 600;
+    }
+
+    .app-header p {
+      margin: 0.35rem 0 0;
+      opacity: 0.9;
+      font-size: 0.9rem;
+    }
+
+    .loading-bar {
+      height: 3px;
+      background: var(--light-mint);
+      overflow: hidden;
+    }
+
+    .loading-bar .fill {
+      height: 100%;
+      width: 30%;
+      background: var(--medium-teal);
+      animation: load 1.2s ease-in-out infinite;
+    }
+
+    @keyframes load {
+      0% { transform: translateX(-100%); }
+      100% { transform: translateX(400%); }
+    }
+
+    .main {
+      max-width: 1600px;
+      margin: 0 auto;
+      padding: 1.25rem;
+    }
+
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.75rem;
+      margin-bottom: 1.25rem;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.6rem 1rem;
+      border: none;
+      border-radius: var(--radius-sm);
+      font-family: inherit;
+      font-size: 0.9rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: transform 0.15s, box-shadow 0.15s;
+    }
+
+    .btn:hover {
+      transform: translateY(-1px);
+      box-shadow: var(--shadow-hover);
+    }
+
+    .btn:active {
+      transform: translateY(0);
+    }
+
+    .btn-primary {
+      background: var(--medium-teal);
+      color: white;
+    }
+
+    .btn-primary:hover {
+      background: #5d8f8b;
+    }
+
+    .btn-secondary {
+      background: var(--light-mint);
+      color: var(--deep-teal);
+    }
+
+    .btn-ghost {
+      background: transparent;
+      color: var(--deep-teal);
+      border: 1px solid var(--medium-teal);
+    }
+
+    .btn-remove {
+      background: rgba(127, 84, 61, 0.12);
+      color: var(--wood);
+      font-size: 0.85rem;
+    }
+
+    .users-section {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .user-card {
+      background: var(--card-bg);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 1rem 1.25rem;
+      min-width: 280px;
+      max-width: 360px;
+      flex: 1 1 280px;
+      transition: box-shadow 0.2s;
+    }
+
+    .user-card:hover {
+      box-shadow: var(--shadow-hover);
+    }
+
+    .user-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 0.75rem;
+      padding-bottom: 0.5rem;
+      border-bottom: 1px solid var(--light-mint);
+    }
+
+    .user-card-header h3 {
+      margin: 0;
+      font-size: 1rem;
+      font-weight: 600;
+      color: var(--deep-teal);
+    }
+
+    .sliders-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.5rem 1rem;
+    }
+
+    .slider-wrap {
+      display: flex;
+      flex-direction: column;
+      gap: 0.2rem;
+    }
+
+    .slider-wrap label {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      text-transform: capitalize;
+    }
+
+    .slider-wrap input[type="range"] {
+      width: 100%;
+      height: 6px;
+      -webkit-appearance: none;
+      appearance: none;
+      background: var(--light-mint);
+      border-radius: 3px;
+      outline: none;
+    }
+
+    .slider-wrap input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: var(--medium-teal);
+      cursor: pointer;
+      transition: transform 0.15s;
+    }
+
+    .slider-wrap input[type="range"]::-webkit-slider-thumb:hover {
+      transform: scale(1.1);
+    }
+
+    .slider-wrap input[type="range"]::-moz-range-thumb {
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: var(--medium-teal);
+      cursor: pointer;
+      border: none;
+    }
+
+    .slider-value {
+      font-size: 0.7rem;
+      color: var(--text-muted);
+    }
+
+    .add-user-wrap {
+      min-width: 200px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .add-user-card {
+      background: var(--light-mint);
+      border: 2px dashed var(--medium-teal);
+      border-radius: var(--radius);
+      padding: 2rem;
+      cursor: pointer;
+      transition: background 0.2s, border-color 0.2s;
+      text-align: center;
+      color: var(--deep-teal);
+    }
+
+    .add-user-card:hover {
+      background: rgba(182, 217, 224, 0.4);
+      border-color: var(--deep-teal);
+    }
+
+    .add-user-card span {
+      display: block;
+      font-size: 2rem;
+      margin-bottom: 0.25rem;
+    }
+
+    .add-user-card strong {
+      font-size: 0.95rem;
+    }
+
+    .results-section {
+      margin-top: 1.5rem;
+    }
+
+    .results-section h2 {
+      font-family: 'Playfair Display', serif;
+      font-size: 1.35rem;
+      color: var(--deep-teal);
+      margin: 0 0 1rem;
+      padding-bottom: 0.5rem;
+      border-bottom: 2px solid var(--light-sky);
+    }
+
+    .results-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 1rem;
+    }
+
+    .result-card {
+      background: var(--card-bg);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 1rem 1.25rem;
+      border-left: 4px solid var(--medium-teal);
+    }
+
+    .result-card.group {
+      border-left-color: var(--wood);
+      grid-column: 1 / -1;
+    }
+
+    .result-card h4 {
+      margin: 0 0 0.5rem;
+      font-size: 0.9rem;
+      color: var(--deep-teal);
+    }
+
+    .result-card ul {
+      margin: 0;
+      padding-left: 1.25rem;
+    }
+
+    .result-card li {
+      margin-bottom: 0.35rem;
+      font-size: 0.9rem;
+    }
+
+    .similarity-badge {
+      display: inline-block;
+      background: var(--light-sky);
+      color: var(--deep-teal);
+      padding: 0.15rem 0.5rem;
+      border-radius: 999px;
+      font-size: 0.75rem;
+      font-weight: 500;
+      margin-left: 0.35rem;
+    }
+
+    .matrix-wrap {
+      overflow-x: auto;
+      margin: 0.5rem 0;
+    }
+
+    .matrix-table {
+      border-collapse: collapse;
+      font-size: 0.85rem;
+      min-width: 200px;
+    }
+
+    .matrix-table th,
+    .matrix-table td {
+      padding: 0.4rem 0.6rem;
+      text-align: center;
+      border: 1px solid var(--light-mint);
+    }
+
+    .matrix-table th {
+      background: var(--light-mint);
+      color: var(--deep-teal);
+      font-weight: 600;
+    }
+
+    .matrix-table td {
+      background: var(--card-bg);
+    }
+
+    .consensus-box {
+      background: linear-gradient(135deg, var(--light-sky) 0%, var(--light-mint) 100%);
+      border-radius: var(--radius);
+      padding: 1rem 1.25rem;
+      margin-top: 1rem;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .consensus-box .value {
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: var(--deep-teal);
+    }
+
+    .consensus-box .label {
+      font-size: 0.9rem;
+      color: var(--text-muted);
+    }
+
+    .overlap-list {
+      list-style: none;
+      padding-left: 0;
+    }
+
+    .overlap-list li {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-bottom: 0.4rem;
+    }
+
+    .overlap-list .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--medium-teal);
+    }
+
+    .error-toast {
+      position: fixed;
+      bottom: 1.5rem;
+      left: 50%;
+      transform: translateX(-50%);
+      max-width: 90vw;
+      background: var(--wood);
+      color: white;
+      padding: 0.75rem 1.25rem;
+      border-radius: var(--radius-sm);
+      box-shadow: var(--shadow-hover);
+      z-index: 100;
+      animation: fadeIn 0.25s;
+      white-space: pre-wrap;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateX(-50%) translateY(10px); }
+      to { opacity: 1; transform: translateX(-50%) translateY(0); }
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 2rem;
+      color: var(--text-muted);
+      font-size: 0.95rem;
+    }
+
+    .data-status {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      margin-left: 0.5rem;
+    }
+
+    .btn:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .btn:disabled:hover {
+      transform: none;
+      box-shadow: none;
+    }
+
+    @media (max-width: 640px) {
+      .sliders-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .user-card {
+        min-width: 100%;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header class="app-header">
+    <h1>Coastal Movies</h1>
+    <p>Group emotion-based movie recommender — adjust sliders and find a film everyone will enjoy. Set at least one emotion above 0 for each user.</p>
+  </header>
+
+  <div id="loading" class="loading-bar" hidden>
+    <div class="fill"></div>
+  </div>
+
+  <main class="main">
+    <div class="toolbar">
+      <button type="button" class="btn btn-primary" id="computeBtn" disabled>
+        Get group recommendations
+      </button>
+      <button type="button" class="btn btn-secondary" id="resetSlidersBtn">
+        Reset all sliders
+      </button>
+      <span id="dataStatus" class="data-status" aria-live="polite"></span>
+    </div>
+
+    <section class="users-section" id="usersSection">
+      <!-- User cards injected here -->
+      <div class="add-user-wrap">
+        <div class="add-user-card" id="addUserCard" role="button" tabindex="0">
+          <span aria-hidden="true">+</span>
+          <strong>Add user</strong>
+        </div>
+      </div>
+    </section>
+
+    <section class="results-section" id="resultsSection" hidden>
+      <h2>Recommendations</h2>
+      <div id="resultsContent"></div>
+    </section>
+  </main>
+
+  <div id="toast" class="error-toast" role="alert" hidden></div>
+
+  <script src="app.js"></script>
+</body>
+</html>

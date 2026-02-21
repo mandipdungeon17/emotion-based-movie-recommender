@@ -1,0 +1,6 @@
+# Web app server (server.py) uses only the Python standard library.
+# No pip install needed for: python server.py
+
+# If you also run the original GUI (multi_user_recommender.py), install:
+# pandas>=2.0
+# numpy>=1.24
