@@ -76,6 +76,8 @@ emotion-based-movie-recommender/
 ├── movies_emotions_50.csv            # Movie dataset with emotion vectors (legacy)
 ├── movie_emotion_engine.py            # Single-file recommendation engine
 ├── requirements.txt                  # Optional deps (pandas, numpy for GUI)
+├── poster_scraper_tmdb.py            # Download movie posters (TMDB API)
+├── movie_posters/                    # Downloaded posters (high-res, vertical)
 └── README.md                         # Project documentation
 ```
 
@@ -92,6 +94,47 @@ pip install pandas numpy
 ```bash
 python movie_emotion_engine.py
 ```
+
+---
+
+## 🖼️ Movie poster scraper
+
+Download **high-resolution vertical posters** for all 500 movies in the CSV into `movie_posters/`.
+
+**Source: [The Movie Database (TMDB)](https://www.themoviedb.org/)** — free API, no cookies; posters are native vertical (2:3) and available in original resolution.
+
+### Get a TMDB API key (free)
+
+1. Register: [themoviedb.org/signup](https://www.themoviedb.org/signup)
+2. Create an API key: [themoviedb.org/settings/api](https://www.themoviedb.org/settings/api) (choose “Developer”)
+3. Set the key in your environment:
+
+   **Windows (cmd):**
+   ```bash
+   set TMDB_API_KEY=your_key_here
+   ```
+   **Windows (PowerShell):**
+   ```powershell
+   $env:TMDB_API_KEY="your_key_here"
+   ```
+   **macOS / Linux:**
+   ```bash
+   export TMDB_API_KEY=your_key_here
+   ```
+
+### Run the scraper
+
+Uses only the Python standard library (no `pip` install needed).
+
+```bash
+python poster_scraper_tmdb.py
+```
+
+- Reads `datasets/movies_dataset_500_souj.csv` (title + year).
+- Searches TMDB, downloads the **original** (highest-res) poster per movie.
+- Saves to `movie_posters/` as `{title}_{year}.jpg` (or `.png`).
+- Skips files that already exist (safe to re-run).
+- Rate-limited to respect TMDB’s free tier (~40 requests / 10 sec).
 
 ---
 
