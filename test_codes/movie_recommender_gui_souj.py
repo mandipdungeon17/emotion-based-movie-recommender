@@ -29,7 +29,7 @@ EMOTIONS = [
     "regret","relief","nostalgia","compassion","anxiety","inspiration",
 ]
 
-CSV_FILENAME = os.path.join(os.path.dirname(__file__), "movies_emotions_50_souj.csv")
+CSV_FILENAME = os.path.join(os.path.dirname(__file__), "movies_dataset_500.csv")
 
 
 class MovieRecommenderApp(tk.Tk):
