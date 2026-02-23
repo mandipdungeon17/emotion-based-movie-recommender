@@ -28,8 +28,15 @@ const GENRE_OPTIONS = [
   "Mystery","Romance","Sci-Fi","Sport","Thriller","War","Western",
 ];
 
-const LEFT_EMOTIONS  = EMOTIONS.slice(0, 12);
-const RIGHT_EMOTIONS = EMOTIONS.slice(12, 24);
+// 4 columns, 6 rows — grouped by emotional theme
+// Col 1: Positive/uplifting
+const COL1 = ["joy","excitement","hope","love","gratitude","inspiration"];
+// Col 2: Social/relational
+const COL2 = ["trust","anticipation","curiosity","compassion","confidence","determination"];
+// Col 3: Negative/dark
+const COL3 = ["sadness","fear","anger","disgust","anxiety","loneliness"];
+// Col 4: Complex/reflective
+const COL4 = ["surprise","guilt","shame","regret","relief","nostalgia"];
 
 function genRoomId() {
   return Math.random().toString(36).substring(2, 8).toUpperCase();
@@ -701,43 +708,85 @@ export default function App() {
                   </button>
                 </div>
 
-                {/* 2×12 slider grid */}
-                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"0 48px",
-                  background:"#fff", border:"1px solid #e5e3dc", borderRadius:10, padding:"20px 28px" }}>
+                {/* 4×6 slider grid — grouped by emotional theme */}
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr 1fr", gap:"0 36px",
+                  background:"#fff", border:"1px solid #e5e3dc", borderRadius:10, padding:"18px 24px" }}>
+
+                  {/* Col 1: Positive */}
                   <div>
-                    {LEFT_EMOTIONS.map(function(e){
+                    <div style={{ fontSize:9, fontWeight:700, letterSpacing:"0.1em", textTransform:"uppercase",
+                      color:"#d97706", marginBottom:10, paddingBottom:6, borderBottom:"2px solid #fef3c7" }}>
+                      Positive
+                    </div>
+                    {COL1.map(function(e){
                       return <EmotionSlider key={e} emotion={e} value={myEmotions[e]} onChange={handleEmotionChange} />;
                     })}
                   </div>
+
+                  {/* Col 2: Social */}
                   <div>
-                    {RIGHT_EMOTIONS.map(function(e){
+                    <div style={{ fontSize:9, fontWeight:700, letterSpacing:"0.1em", textTransform:"uppercase",
+                      color:"#0891b2", marginBottom:10, paddingBottom:6, borderBottom:"2px solid #e0f2fe" }}>
+                      Social
+                    </div>
+                    {COL2.map(function(e){
                       return <EmotionSlider key={e} emotion={e} value={myEmotions[e]} onChange={handleEmotionChange} />;
                     })}
                   </div>
+
+                  {/* Col 3: Dark */}
+                  <div>
+                    <div style={{ fontSize:9, fontWeight:700, letterSpacing:"0.1em", textTransform:"uppercase",
+                      color:"#dc2626", marginBottom:10, paddingBottom:6, borderBottom:"2px solid #fee2e2" }}>
+                      Dark
+                    </div>
+                    {COL3.map(function(e){
+                      return <EmotionSlider key={e} emotion={e} value={myEmotions[e]} onChange={handleEmotionChange} />;
+                    })}
+                  </div>
+
+                  {/* Col 4: Reflective */}
+                  <div>
+                    <div style={{ fontSize:9, fontWeight:700, letterSpacing:"0.1em", textTransform:"uppercase",
+                      color:"#7c3aed", marginBottom:10, paddingBottom:6, borderBottom:"2px solid #ede9fe" }}>
+                      Reflective
+                    </div>
+                    {COL4.map(function(e){
+                      return <EmotionSlider key={e} emotion={e} value={myEmotions[e]} onChange={handleEmotionChange} />;
+                    })}
+                  </div>
+
                 </div>
 
-                {/* Get Recommendations controls */}
-                <div style={{ marginTop:20, background:"#fff", border:"1px solid #e5e3dc", borderRadius:10, padding:"20px 24px" }}>
-                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:14 }}>
-                    <div>
-                      <div style={{ fontSize:13, fontWeight:600, color:"#1e293b", marginBottom:2 }}>Number of Results</div>
-                      <div style={{ fontSize:11, color:"#94a3b8" }}>How many movies to recommend</div>
+                {/* Get Recommendations — sticky bar always visible */}
+                <div style={{ position:"sticky", bottom:0, marginTop:16, zIndex:20,
+                  background:"#f0efe9", borderTop:"1px solid #e5e3dc", padding:"14px 0 4px" }}>
+                  <div style={{ background:"#fff", border:"1px solid #e5e3dc", borderRadius:10, padding:"16px 20px" }}>
+                    <div style={{ display:"flex", alignItems:"center", gap:12, flexWrap:"wrap" }}>
+                      {/* Quick N buttons */}
+                      <div style={{ display:"flex", gap:6, flex:1, minWidth:220 }}>
+                        {[3,5,7,10].map(function(n){
+                          return <button key={n} className={"nbtn"+(topN===n?" active":"")} onClick={function(){ setTopN(n); }}>{n}</button>;
+                        })}
+                        <input type="number" min={1} max={50} value={topN}
+                          onChange={function(e){ setTopN(Math.max(1,Math.min(50,parseInt(e.target.value)||1))); }}
+                          className="ifield" style={{ width:54, textAlign:"center", padding:"7px 6px",
+                            fontFamily:"'DM Mono',monospace", fontSize:13 }} />
+                      </div>
+                      {/* Label */}
+                      {/* <div style={{ display:"flex", alignItems:"baseline", gap:5 }}>
+                        <span style={{ fontFamily:"'DM Mono',monospace", fontSize:20, fontWeight:700, color:"#1e293b" }}>{topN}</span>
+                        <span style={{ fontSize:11, color:"#94a3b8" }}>results</span>
+                      </div> */}
+                      {/* Button */}
+                      
                     </div>
-                    <span style={{ fontFamily:"'DM Mono',monospace", fontSize:22, fontWeight:700, color:"#1e293b" }}>{topN}</span>
+                    {error && <div style={{ fontSize:12, color:"#dc2626", marginTop:8, padding:"6px 10px", background:"#fef2f2", borderRadius:5 }}>{error}</div>}
+                    <button className="btn-primary" style={{ fontSize:14, padding:"12px", marginTop:"15px" }}
+                      onClick={getRecommendations} disabled={loading}>
+                      {loading ? "Finding matches..." : "Get Recommendations — "+memberCount+(memberCount===1?" person":" people")}
+                    </button>
                   </div>
-                  <div style={{ display:"flex", gap:7, marginBottom:14 }}>
-                    {[3,5,7,10].map(function(n){
-                      return <button key={n} className={"nbtn"+(topN===n?" active":"")} onClick={function(){ setTopN(n); }}>{n}</button>;
-                    })}
-                    <input type="number" min={1} max={50} value={topN}
-                      onChange={function(e){ setTopN(Math.max(1,Math.min(50,parseInt(e.target.value)||1))); }}
-                      className="ifield" style={{ width:60, textAlign:"center", padding:"7px 6px", fontFamily:"'DM Mono',monospace", fontSize:13 }} />
-                  </div>
-                  {error && <div style={{ fontSize:12, color:"#dc2626", marginBottom:10, padding:"8px 12px", background:"#fef2f2", borderRadius:5 }}>{error}</div>}
-                  <button className="btn-primary" style={{ fontSize:14, padding:"12px" }}
-                    onClick={getRecommendations} disabled={loading}>
-                    {loading ? "Finding matches..." : "Get Recommendations — "+memberCount+(memberCount===1?" person":" people")}
-                  </button>
                 </div>
               </div>
             )}
