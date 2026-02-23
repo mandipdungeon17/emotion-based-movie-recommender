@@ -17,7 +17,7 @@ import os
 import json
 import numpy as np
 import pandas as pd
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_file, abort
 from flask_cors import CORS
 
 app = Flask(__name__)
@@ -27,6 +27,10 @@ CORS(app)  # Allow React frontend (any origin) to call this API
 # CONFIG
 # ─────────────────────────────────────────────
 CSV_PATH = os.path.join(os.path.dirname(__file__), "movies_dataset_500.csv")
+
+# Folder containing movie poster images (e.g. "Inception.jpg")
+# Adjust this path if your posters are in a different location.
+POSTER_PATH = r"D:\AI_ML_Project\emotion-based-movie-recommender\movie_posters"
 
 EMOTIONS = [
     "joy", "sadness", "fear", "anger", "disgust", "surprise", "trust",
@@ -326,6 +330,55 @@ def movies():
 
     except Exception as ex:
         return jsonify({"error": str(ex)}), 500
+
+
+# ─────────────────────────────────────────────
+# POSTER ROUTES
+# ─────────────────────────────────────────────
+
+@app.route("/posters-debug", methods=["GET"])
+def posters_debug():
+    """Lists all files found in POSTER_PATH so you can verify filenames."""
+    if not os.path.isdir(POSTER_PATH):
+        return jsonify({"error": "POSTER_PATH does not exist", "path": POSTER_PATH}), 500
+    files = sorted(os.listdir(POSTER_PATH))
+    return jsonify({"path": POSTER_PATH, "count": len(files), "files": files})
+
+
+@app.route("/posters/<path:title>", methods=["GET"])
+def poster(title):
+    """
+    Serve a movie poster by movie title.
+
+    Filenames in the folder follow the pattern: Title_Year.jpg
+    e.g. "The Social Network" → "The_Social_Network_2010.jpg"
+
+    Strategy:
+      1. Decode the title from the URL
+      2. Convert spaces → underscores
+      3. Scan the folder for any file that STARTS WITH that slug
+         (this handles the _YEAR suffix without needing the year)
+      4. Return the first match, or 404
+    """
+    from urllib.parse import unquote
+
+    if not os.path.isdir(POSTER_PATH):
+        abort(404)
+
+    # Normalise: URL-decode, strip whitespace, replace spaces with underscores
+    decoded = unquote(title).strip()
+    slug = decoded.replace(" ", "_")
+
+    # Scan directory for a filename starting with this slug
+    for fname in os.listdir(POSTER_PATH):
+        name, ext = os.path.splitext(fname)
+        if ext.lower() not in (".jpg", ".jpeg", ".png", ".webp"):
+            continue
+        # Match: filename starts with slug (case-insensitive)
+        if name.lower().startswith(slug.lower()):
+            return send_file(os.path.join(POSTER_PATH, fname))
+
+    abort(404)
 
 
 # ─────────────────────────────────────────────
