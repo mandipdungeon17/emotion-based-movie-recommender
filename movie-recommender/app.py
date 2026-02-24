@@ -1,5 +1,5 @@
 """
-CineEmotion - Flask Backend API
+CinEmotion - Flask Backend API
 ================================
 Run:
     pip install flask flask-cors pandas numpy
@@ -83,24 +83,124 @@ print(f"[INFO] Loaded {len(DF)} movies.")
 
 
 # ─────────────────────────────────────────────
-# CORE RECOMMENDATION LOGIC
+# EMOTION-AWARE GROUP AGGREGATION
 # ─────────────────────────────────────────────
-def average_emotion_vectors(members: list[dict]) -> np.ndarray:
-    """
-    members: list of dicts, each with key 'emotions': {emotion_name: float 0-10}
-    Returns averaged, L2-normalized vector of shape (len(EMOTIONS),)
-    """
-    vectors = []
-    for m in members:
-        emotions = m.get("emotions", {})
-        vec = np.array([float(emotions.get(e, 0)) / 10.0 for e in EMOTIONS])
-        vectors.append(vec)
+#
+# We implement four strategies from social choice theory
+# (Felfernig et al., Group Recommender Systems, 2018)
+# adapted to emotion vectors instead of item ratings.
+#
+#  avg          – simple average (baseline)
+#  least_misery – for each emotion, take the MINIMUM across members
+#                 → no one gets a movie that clashes with their mood
+#  most_pleasure– for each emotion, take the MAXIMUM across members
+#                 → at least one person will love the result
+#  avg_no_misery– average only if NO member scores the emotion below
+#                 a misery threshold; otherwise zero that dimension out
+#                 → consensus with a veto
+#  weighted_avg – members weighted by their emotional intensity
+#                 (people who feel stronger emotions pull the group more)
 
-    avg = np.mean(vectors, axis=0)
-    norm = np.linalg.norm(avg)
-    if norm == 0:
-        return avg
-    return avg / norm
+MISERY_THRESHOLD = 2.0   # out of 10 — below this = "this emotion upsets me"
+
+
+def _member_vectors(members):
+    """Return list of raw (0-10) emotion numpy arrays, one per member."""
+    vecs = []
+    for m in members:
+        emo = m.get("emotions", {})
+        vecs.append(np.array([float(emo.get(e, 0)) for e in EMOTIONS]))
+    return vecs
+
+
+def _normalise(vec):
+    n = np.linalg.norm(vec)
+    return vec / n if n > 0 else vec
+
+
+def aggregate_avg(vecs):
+    """Simple average — baseline."""
+    return _normalise(np.mean(vecs, axis=0))
+
+
+def aggregate_least_misery(vecs):
+    """
+    Per emotion, take the minimum score across all members.
+    Ensures no member is matched to a film that triggers a mood they
+    explicitly don't want (e.g. one person low on fear ⇒ no horror).
+    Best for groups where one member has strong aversions.
+    """
+    return _normalise(np.min(vecs, axis=0))
+
+
+def aggregate_most_pleasure(vecs):
+    """
+    Per emotion, take the maximum score across all members.
+    Optimises for at least one person being very satisfied.
+    Best for groups where you want to honour someone's strong desire.
+    """
+    return _normalise(np.max(vecs, axis=0))
+
+
+def aggregate_avg_no_misery(vecs):
+    """
+    Average without misery: compute average, but for any emotion where
+    ANY member scores below MISERY_THRESHOLD, zero that dimension out.
+    This is a veto: a member in a strongly anti-X mood prevents X-heavy
+    films from being recommended, even if others want them.
+    Best for balanced groups where nobody should feel excluded.
+    """
+    matrix = np.stack(vecs, axis=0)           # shape (n_members, n_emotions)
+    avg = np.mean(matrix, axis=0)
+    mins = np.min(matrix, axis=0)
+    # Zero out any emotion dimension where someone is below threshold
+    avg[mins < MISERY_THRESHOLD] = 0.0
+    return _normalise(avg)
+
+
+def aggregate_weighted_avg(vecs):
+    """
+    Weighted average by emotional intensity.
+    Members with stronger overall emotions (higher L2 norm) pull the
+    group vector more — they 'feel more' so their mood matters more.
+    Useful when group members have very different intensity levels.
+    """
+    weights = np.array([np.linalg.norm(v) for v in vecs])
+    if weights.sum() == 0:
+        return aggregate_avg(vecs)
+    weights = weights / weights.sum()
+    weighted = sum(w * v for w, v in zip(weights, vecs))
+    return _normalise(weighted)
+
+
+AGGREGATION_STRATEGIES = {
+    "avg":           aggregate_avg,
+    "least_misery":  aggregate_least_misery,
+    "most_pleasure": aggregate_most_pleasure,
+    "avg_no_misery": aggregate_avg_no_misery,
+    "weighted_avg":  aggregate_weighted_avg,
+}
+
+STRATEGY_LABELS = {
+    "avg":           "Simple Average",
+    "least_misery":  "Least Misery — no one gets a clashing mood",
+    "most_pleasure": "Most Pleasure — honours strongest desires",
+    "avg_no_misery": "Average without Misery — consensus with veto",
+    "weighted_avg":  "Intensity-Weighted Average",
+}
+
+
+def build_group_vector(members, strategy="avg_no_misery"):
+    """
+    Build a normalised group emotion vector using the chosen strategy.
+    Falls back to 'avg' if strategy is unknown.
+    Single-member groups always use plain average (strategies are identical).
+    """
+    vecs = _member_vectors(members)
+    if len(vecs) == 1:
+        return _normalise(vecs[0])
+    fn = AGGREGATION_STRATEGIES.get(strategy, aggregate_avg)
+    return fn(vecs)
 
 
 def apply_filters(df: pd.DataFrame, filters: dict) -> np.ndarray:
@@ -142,18 +242,19 @@ def apply_filters(df: pd.DataFrame, filters: dict) -> np.ndarray:
     return mask
 
 
-def get_recommendations(members: list[dict], top_n: int = 5, filters: dict = None) -> list[dict]:
+def get_recommendations(members: list[dict], top_n: int = 5,
+                        filters: dict = None, strategy: str = "avg_no_misery") -> list[dict]:
     """
     Core recommendation function.
-    Returns list of top_n movies sorted by cosine similarity to group average.
+    strategy: one of avg | least_misery | most_pleasure | avg_no_misery | weighted_avg
+    Returns list of top_n movies sorted by cosine similarity to the group vector.
     """
     if len(DF) == 0:
         return []
 
     filters = filters or {}
-    user_unit = average_emotion_vectors(members)
-    norm = np.linalg.norm(user_unit)
-    if norm == 0:
+    group_vec = build_group_vector(members, strategy=strategy)
+    if np.linalg.norm(group_vec) == 0:
         return []
 
     # Apply filters
@@ -162,7 +263,7 @@ def get_recommendations(members: list[dict], top_n: int = 5, filters: dict = Non
         return []
 
     indices = np.where(mask)[0]
-    similarities = NORM_MATRIX[indices].dot(user_unit)
+    similarities = NORM_MATRIX[indices].dot(group_vec)
 
     # Sort descending
     top_k = min(top_n, len(similarities))
@@ -180,7 +281,6 @@ def get_recommendations(members: list[dict], top_n: int = 5, filters: dict = Non
             "imdb": float(row["imdb"]) if not pd.isna(row.get("imdb")) else None,
             "similarity": round(float(similarities[idx]), 4),
             "match_percent": round(float(similarities[idx]) * 100, 1),
-            # Include top 3 dominant emotions for this movie
             "dominant_emotions": _get_dominant_emotions(row, n=3),
         })
 
@@ -257,19 +357,33 @@ def recommend():
 
         filters = data.get("filters", {})
 
-        recommendations = get_recommendations(members, top_n=top_n, filters=filters)
+        strategy = data.get("strategy", "avg_no_misery")
+        if strategy not in AGGREGATION_STRATEGIES:
+            strategy = "avg_no_misery"
 
-        # Compute group average emotions for display
+        recommendations = get_recommendations(
+            members, top_n=top_n, filters=filters, strategy=strategy
+        )
+
+        # Per-emotion display: show true avg and also per-member spread
         avg_emotions = {}
+        spread_emotions = {}   # std dev per emotion — useful to show disagreement
         for e in EMOTIONS:
-            vals = [m["emotions"].get(e, 0) for m in members]
+            vals = [float(m["emotions"].get(e, 0)) for m in members]
             avg_emotions[e] = round(sum(vals) / len(vals), 2)
+            if len(vals) > 1:
+                mean = avg_emotions[e]
+                std = (sum((v - mean)**2 for v in vals) / len(vals)) ** 0.5
+                spread_emotions[e] = round(std, 2)
 
         return jsonify({
             "recommendations": recommendations,
             "group_size": len(members),
             "top_n": top_n,
+            "strategy": strategy,
+            "strategy_label": STRATEGY_LABELS.get(strategy, strategy),
             "group_avg_emotions": avg_emotions,
+            "group_emotion_spread": spread_emotions,
             "filters_applied": filters,
         })
 

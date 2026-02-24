@@ -45,14 +45,23 @@ function defaultEmotions() {
   var o = {}; EMOTIONS.forEach(function(e){ o[e] = 5; }); return o;
 }
 
-async function apiRecommend(members, topN, filters) {
+async function apiRecommend(members, topN, filters, strategy) {
   var res = await fetch(API_BASE + "/recommend", {
     method:"POST", headers:{"Content-Type":"application/json"},
-    body: JSON.stringify({ members, top_n: topN, filters }),
+    body: JSON.stringify({ members, top_n: topN, filters, strategy }),
   });
   if (!res.ok) { var e = await res.json().catch(function(){ return {}; }); throw new Error(e.error || "HTTP "+res.status); }
   return res.json();
 }
+
+// Aggregation strategies exposed to the user
+var STRATEGIES = [
+  { id:"avg_no_misery",  label:"Balanced",       desc:"Average mood, but vetoes any emotion someone strongly dislikes" },
+  { id:"avg",            label:"Simple Average", desc:"Straight average of all members' emotions" },
+  { id:"least_misery",   label:"Least Misery",   desc:"Picks the minimum per emotion — nobody gets a clashing mood" },
+  { id:"most_pleasure",  label:"Most Pleasure",  desc:"Picks the maximum per emotion — honours the strongest desire" },
+  { id:"weighted_avg",   label:"By Intensity",   desc:"Members who feel more strongly pull the group more" },
+];
 async function apiHealth() { return (await fetch(API_BASE + "/health")).json(); }
 
 // ─── GLOBAL STYLES ───────────────────────────────────────────────────────────
@@ -391,7 +400,7 @@ function LeftSidebar(props) {
     }}>
       {/* Top: logo + nav */}
       <div style={{ padding:"16px 18px 0" }}>
-        <div style={{ fontSize:15, fontWeight:700, color:"#0f172a", letterSpacing:"-0.02em", marginBottom:4 }}>CineEmotion</div>
+        <div style={{ fontSize:15, fontWeight:700, color:"#0f172a", letterSpacing:"-0.02em", marginBottom:4 }}>CinEmotion</div>
         <StatusDot status={apiStatus} />
       </div>
 
@@ -495,6 +504,7 @@ export default function App() {
   var [myEmotions, setMyEmotions]     = useState(defaultEmotions);
   var [topN, setTopN]                 = useState(5);
   var [filters, setFilters]           = useState({ eras:[], min_imdb:0, genres:[] });
+  var [strategy, setStrategy]         = useState("avg_no_misery");
   var [results, setResults]           = useState(null);
   var [loading, setLoading]           = useState(false);
   var [error, setError]               = useState("");
@@ -575,7 +585,7 @@ export default function App() {
     if (!room || !room.members.length) return;
     setLoading(true); setError("");
     try {
-      var data = await apiRecommend(room.members, topN, filters);
+      var data = await apiRecommend(room.members, topN, filters, strategy);
       setResults(data); setActiveTab("results");
     } catch(e) { setError("Error: "+e.message); }
     finally { setLoading(false); }
@@ -594,7 +604,7 @@ export default function App() {
         <style>{CSS}</style>
         <div style={{ width:"100%", maxWidth:860 }}>
           <div style={{ marginBottom:36 }}>
-            <h1 style={{ margin:"0 0 6px", fontSize:28, fontWeight:700, color:"#0f172a", letterSpacing:"-0.03em" }}>CineEmotion</h1>
+            <h1 style={{ margin:"0 0 6px", fontSize:28, fontWeight:700, color:"#0f172a", letterSpacing:"-0.03em" }}>CinEmotion</h1>
             <div style={{ fontSize:13, color:"#94a3b8", marginBottom:8 }}>Group Movie Recommender</div>
             <StatusDot status={apiStatus} />
           </div>
@@ -664,7 +674,7 @@ export default function App() {
       {/* Topbar */}
       <div style={{ background:"#fff", borderBottom:"1px solid #e5e3dc", height:48, display:"flex",
         alignItems:"center", paddingLeft:18, flexShrink:0, zIndex:100 }}>
-        <span style={{ fontSize:14, fontWeight:700, color:"#0f172a", letterSpacing:"-0.02em" }}>CineEmotion</span>
+        <span style={{ fontSize:14, fontWeight:700, color:"#0f172a", letterSpacing:"-0.02em" }}>CinEmotion</span>
       </div>
 
       {/* Body */}
@@ -762,6 +772,36 @@ export default function App() {
                 <div style={{ position:"sticky", bottom:0, marginTop:16, zIndex:20,
                   background:"#f0efe9", borderTop:"1px solid #e5e3dc", padding:"14px 0 4px" }}>
                   <div style={{ background:"#fff", border:"1px solid #e5e3dc", borderRadius:10, padding:"16px 20px" }}>
+
+                    {/* Strategy picker */}
+                    <div style={{ marginBottom:14 }}>
+                      <div style={{ fontSize:10, fontWeight:700, letterSpacing:"0.1em", textTransform:"uppercase",
+                        color:"#94a3b8", marginBottom:8 }}>Group Mood Strategy</div>
+                      <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+                        {STRATEGIES.map(function(s){
+                          var active = strategy === s.id;
+                          return (
+                            <button key={s.id} onClick={function(){ setStrategy(s.id); }}
+                              title={s.desc}
+                              style={{
+                                padding:"5px 12px", borderRadius:5, cursor:"pointer", fontSize:11, fontWeight:600,
+                                fontFamily:"'DM Sans',sans-serif", transition:"all 0.12s", whiteSpace:"nowrap",
+                                border: active ? "none" : "1px solid #d1cfc8",
+                                background: active ? "#1e293b" : "none",
+                                color: active ? "#fff" : "#64748b",
+                              }}>
+                              {s.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      {STRATEGIES.find(function(s){ return s.id===strategy; }) && (
+                        <div style={{ fontSize:11, color:"#94a3b8", marginTop:6, fontStyle:"italic" }}>
+                          {STRATEGIES.find(function(s){ return s.id===strategy; }).desc}
+                        </div>
+                      )}
+                    </div>
+
                     <div style={{ display:"flex", alignItems:"center", gap:12, flexWrap:"wrap" }}>
                       {/* Quick N buttons */}
                       <div style={{ display:"flex", gap:6, flex:1, minWidth:220 }}>
@@ -774,18 +814,17 @@ export default function App() {
                             fontFamily:"'DM Mono',monospace", fontSize:13 }} />
                       </div>
                       {/* Label */}
-                      {/* <div style={{ display:"flex", alignItems:"baseline", gap:5 }}>
+                      <div style={{ display:"flex", alignItems:"baseline", gap:5 }}>
                         <span style={{ fontFamily:"'DM Mono',monospace", fontSize:20, fontWeight:700, color:"#1e293b" }}>{topN}</span>
                         <span style={{ fontSize:11, color:"#94a3b8" }}>results</span>
-                      </div> */}
+                      </div>
                       {/* Button */}
-                      
+                      <button className="btn-primary" style={{ fontSize:13, padding:"10px 24px", width:"auto" }}
+                        onClick={getRecommendations} disabled={loading}>
+                        {loading ? "Finding matches..." : "Get Recommendations — "+memberCount+(memberCount===1?" person":" people")}
+                      </button>
                     </div>
                     {error && <div style={{ fontSize:12, color:"#dc2626", marginTop:8, padding:"6px 10px", background:"#fef2f2", borderRadius:5 }}>{error}</div>}
-                    <button className="btn-primary" style={{ fontSize:14, padding:"12px", marginTop:"15px" }}
-                      onClick={getRecommendations} disabled={loading}>
-                      {loading ? "Finding matches..." : "Get Recommendations — "+memberCount+(memberCount===1?" person":" people")}
-                    </button>
                   </div>
                 </div>
               </div>
@@ -896,6 +935,13 @@ export default function App() {
                         <div style={{ fontSize:15, fontWeight:700, color:"#0f172a", marginBottom:4 }}>
                           Top {recs.length} for {memberCount===1 ? myName : memberCount+" people"}
                         </div>
+                        {results && results.strategy_label && (
+                          <div style={{ fontSize:11, color:"#64748b", marginBottom:4,
+                            background:"#f8fafc", border:"1px solid #e2e8f0",
+                            borderRadius:5, padding:"3px 9px", display:"inline-block" }}>
+                            Strategy: <strong>{results.strategy_label}</strong>
+                          </div>
+                        )}
                         {results.group_avg_emotions && (
                           <div style={{ display:"flex", gap:10, flexWrap:"wrap" }}>
                             {Object.entries(results.group_avg_emotions)
