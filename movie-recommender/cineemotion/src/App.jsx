@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 
-const API_BASE = "http://localhost:5000";
+const API_BASE = "";
 
 function getPosterUrl(title) {
   return API_BASE + "/posters/" + encodeURIComponent(title);
@@ -893,7 +893,7 @@ export default function App() {
 
                 {room && room.members.length > 1 && (
                   <div>
-                    <div style={{ fontSize:12, fontWeight:600, color:"#64748b", marginBottom:12, textTransform:"uppercase", letterSpacing:"0.08em", fontSize:10 }}>Group Average</div>
+                    <div style={{ fontSize:12, fontWeight:600, color:"#64748b", marginBottom:12, textTransform:"uppercase", letterSpacing:"0.08em" }}>Group Average</div>
                     <div style={{ background:"#fff", border:"1px solid #e5e3dc", borderRadius:10, padding:"18px 24px",
                       display:"grid", gridTemplateColumns:"1fr 1fr", gap:"0 32px" }}>
                       {EMOTIONS.map(function(e){

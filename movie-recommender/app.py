@@ -26,11 +26,11 @@ CORS(app)  # Allow React frontend (any origin) to call this API
 # ─────────────────────────────────────────────
 # CONFIG
 # ─────────────────────────────────────────────
-CSV_PATH = os.path.join(os.path.dirname(__file__), "movies_dataset_500.csv")
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+CSV_PATH = os.path.join(BASE_DIR, "datasets", "movies_dataset_500.csv")
 
 # Folder containing movie poster images (e.g. "Inception.jpg")
-# Adjust this path if your posters are in a different location.
-POSTER_PATH = r"D:\AI_ML_Project\emotion-based-movie-recommender\movie_posters"
+POSTER_PATH = os.path.join(BASE_DIR, "movie_posters")
 
 EMOTIONS = [
     "joy", "sadness", "fear", "anger", "disgust", "surprise", "trust",
