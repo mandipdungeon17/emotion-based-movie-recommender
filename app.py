@@ -91,6 +91,20 @@ print("[INFO] Loading movie dataset...")
 DF, NORM_MATRIX = load_movies()
 print(f"[INFO] Loaded {len(DF)} movies.")
 
+# Load TMDB enrichment data (overview, rating, watch providers)
+ENRICHMENT_PATH = os.path.join(BASE_DIR, "datasets", "movie_enrichment.json")
+
+def load_enrichment():
+    if not os.path.exists(ENRICHMENT_PATH):
+        print("[WARN] Enrichment file not found. Run enrich_movies.py first.")
+        return {}
+    with open(ENRICHMENT_PATH, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    return data.get("movies", {})
+
+ENRICHMENT = load_enrichment()
+print(f"[INFO] Loaded enrichment data for {len(ENRICHMENT)} movies.")
+
 
 # ─────────────────────────────────────────────
 # EMOTION-AWARE GROUP AGGREGATION
@@ -283,7 +297,7 @@ def get_recommendations(members: list[dict], top_n: int = 5,
     for rank, idx in enumerate(order):
         movie_i = indices[idx]
         row = DF.iloc[movie_i]
-        results.append({
+        results.append(_enrich_result({
             "rank": rank + 1,
             "title": str(row.get("title", "Unknown")),
             "year": int(row["year"]) if not pd.isna(row.get("year")) else None,
@@ -292,7 +306,7 @@ def get_recommendations(members: list[dict], top_n: int = 5,
             "similarity": round(float(similarities[idx]), 4),
             "match_percent": round(float(similarities[idx]) * 100, 1),
             "dominant_emotions": _get_dominant_emotions(row, n=3),
-        })
+        }))
 
     return results
 
@@ -301,6 +315,17 @@ def _get_dominant_emotions(row, n=3):
     scores = {e: float(row[e]) for e in EMOTIONS if e in row.index and not pd.isna(row[e])}
     top = sorted(scores.items(), key=lambda x: x[1], reverse=True)[:n]
     return [{"emotion": e, "score": round(s, 3)} for e, s in top]
+
+
+def _enrich_result(result_dict):
+    """Merge TMDB enrichment data (overview, rating, watch providers) into a result."""
+    key = f"{result_dict['title']}_{result_dict['year']}"
+    enrichment = ENRICHMENT.get(key, {})
+    result_dict["overview"] = enrichment.get("overview", "")
+    result_dict["tmdb_rating"] = enrichment.get("tmdb_rating")
+    result_dict["tmdb_vote_count"] = enrichment.get("tmdb_vote_count")
+    result_dict["watch_providers"] = enrichment.get("watch_providers", {})
+    return result_dict
 
 
 # ─────────────────────────────────────────────
@@ -312,6 +337,7 @@ def health():
     return jsonify({
         "status": "ok",
         "movies_loaded": len(DF),
+        "enrichment_loaded": len(ENRICHMENT),
         "emotions_supported": EMOTIONS,
     })
 

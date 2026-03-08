@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 
 const API_BASE = "";
+var TMDB_LOGO_BASE = "/tmdb-img";
 
 function getPosterUrl(title) {
   return API_BASE + "/posters/" + encodeURIComponent(title);
@@ -348,34 +349,79 @@ function ResultCard(props) {
   var genres = (r.genres||"").split("|").slice(0,3);
   var rankColors = ["#d97706","#94a3b8","#b45309"];
   var rankColor  = rankColors[i] || "#94a3b8";
+
+  var expandState = useState(false);
+  var expanded = expandState[0]; var setExpanded = expandState[1];
+
+  // Collect watch providers: flatrate first, then rent, then buy — deduplicated
+  var wp = r.watch_providers || {};
+  var allProviders = (wp.flatrate || []).concat(wp.rent || []).concat(wp.buy || []);
+  var seen = {};
+  var uniqueProviders = [];
+  allProviders.forEach(function(p) {
+    if (!seen[p.name]) { seen[p.name] = true; uniqueProviders.push(p); }
+  });
+  var displayProviders = uniqueProviders.slice(0, 6);
+
   return (
     <div style={{ display:"flex", gap:14, padding:"16px 0", borderBottom:"1px solid #f0efe9" }}>
       <PosterImage title={r.title} />
-      <div style={{ flex:1, minWidth:0, display:"flex", flexDirection:"column", justifyContent:"space-between" }}>
-        <div>
-          <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:5 }}>
-            <span style={{ fontFamily:"'DM Mono',monospace", fontSize:11, fontWeight:700, color: rankColor }}>#{r.rank}</span>
-            <span style={{ fontSize:15, fontWeight:700, color:"#0f172a", lineHeight:1.2 }}>{r.title}</span>
-          </div>
-          <div style={{ display:"flex", gap:10, flexWrap:"wrap", alignItems:"center", marginBottom:6 }}>
-            {r.year && <span style={{ fontSize:11, color:"#94a3b8" }}>{r.year}</span>}
-            {r.imdb && <span style={{ fontSize:11, color:"#d97706", fontWeight:600 }}>{r.imdb} IMDb</span>}
-            {genres.filter(Boolean).map(function(g){ return (
-              <span key={g} style={{ fontSize:11, color:"#64748b" }}>{g}</span>
-            ); })}
-          </div>
-          {r.dominant_emotions && r.dominant_emotions.length > 0 && (
-            <div style={{ display:"flex", gap:7, flexWrap:"wrap" }}>
-              {r.dominant_emotions.map(function(de){
-                return (
-                  <span key={de.emotion} style={{ fontSize:10, fontWeight:600, textTransform:"capitalize",
-                    color: EMOTION_COLORS[de.emotion]||"#64748b" }}>{de.emotion}</span>
-                );
-              })}
-            </div>
-          )}
+      <div style={{ flex:1, minWidth:0, display:"flex", flexDirection:"column", gap:4 }}>
+        {/* Rank + Title */}
+        <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:2 }}>
+          <span style={{ fontFamily:"'DM Mono',monospace", fontSize:11, fontWeight:700, color: rankColor }}>#{r.rank}</span>
+          <span style={{ fontSize:15, fontWeight:700, color:"#0f172a", lineHeight:1.2 }}>{r.title}</span>
         </div>
-        <div>
+
+        {/* Year, Ratings, Genres */}
+        <div style={{ display:"flex", gap:10, flexWrap:"wrap", alignItems:"center" }}>
+          {r.year && <span style={{ fontSize:11, color:"#94a3b8" }}>{r.year}</span>}
+          {r.imdb && <span style={{ fontSize:11, color:"#d97706", fontWeight:600 }}>{r.imdb} IMDb</span>}
+          {r.tmdb_rating && (
+            <span style={{ fontSize:11, color:"#0891b2", fontWeight:600 }}>{r.tmdb_rating.toFixed(1)} TMDB</span>
+          )}
+          {genres.filter(Boolean).map(function(g){ return (
+            <span key={g} style={{ fontSize:11, color:"#64748b" }}>{g}</span>
+          ); })}
+        </div>
+
+        {/* Dominant emotions */}
+        {r.dominant_emotions && r.dominant_emotions.length > 0 && (
+          <div style={{ display:"flex", gap:7, flexWrap:"wrap" }}>
+            {r.dominant_emotions.map(function(de){
+              return (
+                <span key={de.emotion} style={{ fontSize:10, fontWeight:600, textTransform:"capitalize",
+                  color: EMOTION_COLORS[de.emotion]||"#64748b" }}>{de.emotion}</span>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Overview (expandable) */}
+        {r.overview && (
+          <div style={{ marginTop:2 }}>
+            <p style={{
+              fontSize:11, color:"#64748b", lineHeight:1.5, margin:0,
+              overflow: expanded ? "visible" : "hidden",
+              display: expanded ? "block" : "-webkit-box",
+              WebkitLineClamp: expanded ? "unset" : 2,
+              WebkitBoxOrient: "vertical",
+            }}>
+              {r.overview}
+            </p>
+            {r.overview.length > 120 && (
+              <button onClick={function(){ setExpanded(!expanded); }}
+                style={{ background:"none", border:"none", padding:0,
+                  fontSize:10, color:"#2563eb", cursor:"pointer",
+                  fontWeight:600, marginTop:2 }}>
+                {expanded ? "Show less" : "Read more"}
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Match percentage bar */}
+        <div style={{ marginTop:2 }}>
           <div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline", marginBottom:4 }}>
             <span style={{ fontSize:10, color:"#94a3b8", textTransform:"uppercase", letterSpacing:"0.05em" }}>Match</span>
             <span style={{ fontFamily:"'DM Mono',monospace", fontSize:20, fontWeight:700, color:"#1e293b" }}>
@@ -387,6 +433,22 @@ function ResultCard(props) {
               transition:"width 0.8s cubic-bezier(.4,0,.2,1)" }} />
           </div>
         </div>
+
+        {/* Watch providers */}
+        {displayProviders.length > 0 && (
+          <div style={{ display:"flex", gap:6, alignItems:"center", flexWrap:"wrap", marginTop:4 }}>
+            <span style={{ fontSize:9, color:"#94a3b8", textTransform:"uppercase", letterSpacing:"0.05em", marginRight:2 }}>Watch on</span>
+            {displayProviders.map(function(p) {
+              return (
+                <img key={p.name} src={TMDB_LOGO_BASE + p.logo_path}
+                  alt={p.name} title={p.name}
+                  style={{ width:22, height:22, borderRadius:4, objectFit:"cover" }}
+                  onError={function(e){ e.target.style.display="none"; }}
+                />
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );

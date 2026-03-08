@@ -13,6 +13,12 @@ export default defineConfig({
       "/posters": "http://localhost:5000",
       "/posters-debug": "http://localhost:5000",
       "/rooms": "http://localhost:5000",
+      "/tmdb-img": {
+        target: "https://image.tmdb.org/t/p/original",
+        changeOrigin: true,
+        rewrite: function(path) { return path.replace(/^\/tmdb-img/, ""); },
+        secure: false,
+      },
     },
   },
 });
