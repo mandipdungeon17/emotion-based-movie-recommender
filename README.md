@@ -31,7 +31,7 @@ It also works as a **group recommender**. Multiple people can join a room, each 
 ## Project Structure
 
 ```
-movie-recommender/
+emotion-based-movie-recommender/
 ├── app.py                        # Flask backend API
 ├── datasets/
 │   └── movies_dataset_500.csv    # Movie dataset with emotion scores
@@ -59,7 +59,7 @@ movie-recommender/
 ### 1. Start the backend
 
 ```bash
-cd movie-recommender
+cd emotion-based-movie-recommender
 pip install flask flask-cors pandas numpy
 python app.py
 ```
@@ -69,7 +69,7 @@ The API starts at **http://localhost:5000**. Verify with: `http://localhost:5000
 ### 2. Start the frontend
 
 ```bash
-cd movie-recommender/cineemotion
+cd emotion-based-movie-recommender/cineemotion
 npm install
 npm run dev
 ```
