@@ -15,6 +15,9 @@ Endpoints:
 
 import os
 import json
+import uuid
+import threading
+import time
 import numpy as np
 import pandas as pd
 from flask import Flask, request, jsonify, send_file, abort
@@ -22,6 +25,13 @@ from flask_cors import CORS
 
 app = Flask(__name__)
 CORS(app)  # Allow React frontend (any origin) to call this API
+
+# ─────────────────────────────────────────────
+# SERVER-SIDE ROOM MANAGEMENT
+# ─────────────────────────────────────────────
+ROOMS = {}                     # room_id -> room dict
+rooms_lock = threading.Lock()  # thread safety for concurrent polling
+MAX_MEMBERS_PER_ROOM = 10
 
 # ─────────────────────────────────────────────
 # CONFIG
@@ -493,6 +503,350 @@ def poster(title):
             return send_file(os.path.join(POSTER_PATH, fname))
 
     abort(404)
+
+
+# ─────────────────────────────────────────────
+# ROOM HELPERS
+# ─────────────────────────────────────────────
+
+def _gen_room_id():
+    """Generate a unique 6-char uppercase room code."""
+    while True:
+        rid = uuid.uuid4().hex[:6].upper()
+        if rid not in ROOMS:
+            return rid
+
+
+def _default_emotions():
+    """Return a dict of all 24 emotions set to 5."""
+    return {e: 5 for e in EMOTIONS}
+
+
+def _default_filters():
+    """Return a default (empty) filters dict for a new member."""
+    return {"eras": [], "min_imdb": 0, "genres": []}
+
+
+def _aggregate_member_filters(members):
+    """
+    Aggregate per-member filters for recommendation.
+    - eras: union of all members' selected eras
+    - genres: union of all members' selected genres
+    - min_imdb: minimum of all members' min_imdb values (most inclusive)
+    """
+    all_eras = set()
+    all_genres = set()
+    min_imdbs = []
+    for m in members:
+        f = m.get("filters", _default_filters())
+        for era in f.get("eras", []):
+            all_eras.add(era)
+        for genre in f.get("genres", []):
+            all_genres.add(genre)
+        val = float(f.get("min_imdb", 0))
+        if val > 0:
+            min_imdbs.append(val)
+    return {
+        "eras": sorted(all_eras),
+        "genres": sorted(all_genres),
+        "min_imdb": min(min_imdbs) if min_imdbs else 0,
+    }
+
+
+def _find_member(room, member_id):
+    """Find a member in a room by their ID. Returns (index, member) or (-1, None)."""
+    for i, m in enumerate(room["members"]):
+        if m["id"] == member_id:
+            return i, m
+    return -1, None
+
+
+def _room_response(room, member_id=None):
+    """Build the JSON-safe room state for a client."""
+    ready_count = sum(1 for m in room["members"] if m.get("ready"))
+    return {
+        "id": room["id"],
+        "admin_id": room["admin_id"],
+        "strategy": room["strategy"],
+        "top_n": room["top_n"],
+        "members": room["members"],
+        "results": room["results"],
+        "member_count": len(room["members"]),
+        "ready_count": ready_count,
+        "is_admin": member_id == room["admin_id"] if member_id else False,
+    }
+
+
+# ─────────────────────────────────────────────
+# ROOM ROUTES
+# ─────────────────────────────────────────────
+
+@app.route("/rooms/create", methods=["POST"])
+def create_room():
+    """Create a new room. Caller becomes admin."""
+    data = request.get_json(force=True)
+    name = (data.get("name") or "").strip()
+    if not name:
+        return jsonify({"error": "Name is required"}), 400
+
+    with rooms_lock:
+        room_id = _gen_room_id()
+        member_id = str(uuid.uuid4())
+        room = {
+            "id": room_id,
+            "admin_id": member_id,
+            "strategy": "avg_no_misery",
+            "top_n": 5,
+            "members": [{
+                "id": member_id,
+                "name": name,
+                "emotions": _default_emotions(),
+                "filters": _default_filters(),
+                "ready": False,
+            }],
+            "results": None,
+            "created_at": time.time(),
+        }
+        ROOMS[room_id] = room
+
+    return jsonify({
+        "room_id": room_id,
+        "member_id": member_id,
+        "is_admin": True,
+    })
+
+
+@app.route("/rooms/<room_id>/join", methods=["POST"])
+def join_room(room_id):
+    """Join an existing room."""
+    data = request.get_json(force=True)
+    name = (data.get("name") or "").strip()
+    if not name:
+        return jsonify({"error": "Name is required"}), 400
+
+    with rooms_lock:
+        room = ROOMS.get(room_id)
+        if not room:
+            return jsonify({"error": "Room not found"}), 404
+        if len(room["members"]) >= MAX_MEMBERS_PER_ROOM:
+            return jsonify({"error": "Room is full"}), 400
+        for m in room["members"]:
+            if m["name"].lower() == name.lower():
+                return jsonify({"error": "Name already taken in this room"}), 400
+
+        member_id = str(uuid.uuid4())
+        room["members"].append({
+            "id": member_id,
+            "name": name,
+            "emotions": _default_emotions(),
+            "filters": _default_filters(),
+            "ready": False,
+        })
+
+    return jsonify({
+        "room_id": room_id,
+        "member_id": member_id,
+        "is_admin": False,
+    })
+
+
+@app.route("/rooms/<room_id>/leave", methods=["POST"])
+def leave_room(room_id):
+    """Leave a room. If admin leaves, promote next member. If empty, delete room."""
+    data = request.get_json(force=True)
+    member_id = data.get("member_id")
+
+    with rooms_lock:
+        room = ROOMS.get(room_id)
+        if not room:
+            return jsonify({"ok": True})
+
+        idx, _ = _find_member(room, member_id)
+        if idx == -1:
+            return jsonify({"ok": True})
+
+        room["members"].pop(idx)
+
+        if len(room["members"]) == 0:
+            del ROOMS[room_id]
+        elif room["admin_id"] == member_id:
+            room["admin_id"] = room["members"][0]["id"]
+
+    return jsonify({"ok": True})
+
+
+@app.route("/rooms/<room_id>", methods=["GET"])
+def get_room(room_id):
+    """Poll room state. Called every 2.5s by all clients."""
+    member_id = request.args.get("member_id")
+
+    with rooms_lock:
+        room = ROOMS.get(room_id)
+        if not room:
+            return jsonify({"error": "Room not found"}), 404
+
+        _, member = _find_member(room, member_id)
+        if not member:
+            return jsonify({"error": "You are not in this room"}), 403
+
+        return jsonify(_room_response(room, member_id))
+
+
+@app.route("/rooms/<room_id>/emotions", methods=["PUT"])
+def update_emotions(room_id):
+    """Update the calling member's emotions."""
+    data = request.get_json(force=True)
+    member_id = data.get("member_id")
+    emotions = data.get("emotions", {})
+
+    with rooms_lock:
+        room = ROOMS.get(room_id)
+        if not room:
+            return jsonify({"error": "Room not found"}), 404
+
+        idx, _ = _find_member(room, member_id)
+        if idx == -1:
+            return jsonify({"error": "Not in room"}), 403
+
+        clean = {}
+        for e in EMOTIONS:
+            val = float(emotions.get(e, 5))
+            clean[e] = max(0, min(10, val))
+        room["members"][idx]["emotions"] = clean
+
+    return jsonify({"ok": True})
+
+
+@app.route("/rooms/<room_id>/settings", methods=["PUT"])
+def update_settings(room_id):
+    """Update room settings. Only admin can change strategy and top_n."""
+    data = request.get_json(force=True)
+    member_id = data.get("member_id")
+
+    with rooms_lock:
+        room = ROOMS.get(room_id)
+        if not room:
+            return jsonify({"error": "Room not found"}), 404
+
+        idx, _ = _find_member(room, member_id)
+        if idx == -1:
+            return jsonify({"error": "Not in room"}), 403
+
+        is_admin = room["admin_id"] == member_id
+
+        # Strategy and top_n: admin only
+        if "strategy" in data:
+            if not is_admin:
+                return jsonify({"error": "Only the admin can change strategy"}), 403
+            s = data["strategy"]
+            if s in AGGREGATION_STRATEGIES:
+                room["strategy"] = s
+        if "top_n" in data:
+            if not is_admin:
+                return jsonify({"error": "Only the admin can change top_n"}), 403
+            room["top_n"] = max(1, min(50, int(data["top_n"])))
+
+    return jsonify({"ok": True})
+
+
+@app.route("/rooms/<room_id>/filters", methods=["PUT"])
+def update_member_filters(room_id):
+    """Update the calling member's own filters."""
+    data = request.get_json(force=True)
+    member_id = data.get("member_id")
+    filters = data.get("filters", {})
+
+    with rooms_lock:
+        room = ROOMS.get(room_id)
+        if not room:
+            return jsonify({"error": "Room not found"}), 404
+
+        idx, _ = _find_member(room, member_id)
+        if idx == -1:
+            return jsonify({"error": "Not in room"}), 403
+
+        room["members"][idx]["filters"] = {
+            "eras": filters.get("eras", []),
+            "min_imdb": float(filters.get("min_imdb", 0)),
+            "genres": filters.get("genres", []),
+        }
+
+    return jsonify({"ok": True})
+
+
+@app.route("/rooms/<room_id>/ready", methods=["PUT"])
+def toggle_ready(room_id):
+    """Toggle the calling member's ready status."""
+    data = request.get_json(force=True)
+    member_id = data.get("member_id")
+    ready = data.get("ready", True)
+
+    with rooms_lock:
+        room = ROOMS.get(room_id)
+        if not room:
+            return jsonify({"error": "Room not found"}), 404
+
+        idx, _ = _find_member(room, member_id)
+        if idx == -1:
+            return jsonify({"error": "Not in room"}), 403
+
+        room["members"][idx]["ready"] = bool(ready)
+
+    return jsonify({"ok": True})
+
+
+@app.route("/rooms/<room_id>/recommend", methods=["POST"])
+def room_recommend(room_id):
+    """Admin triggers recommendation. Results stored on room for all members."""
+    data = request.get_json(force=True)
+    member_id = data.get("member_id")
+
+    with rooms_lock:
+        room = ROOMS.get(room_id)
+        if not room:
+            return jsonify({"error": "Room not found"}), 404
+        if room["admin_id"] != member_id:
+            return jsonify({"error": "Only the admin can get recommendations"}), 403
+
+        members = list(room["members"])
+        strategy = room["strategy"]
+        top_n = room["top_n"]
+
+    # Aggregate per-member filters (union of eras/genres, min of min_imdb)
+    filters = _aggregate_member_filters(members)
+
+    # Run recommendation OUTSIDE the lock (CPU-intensive, no mutation)
+    recommendations = get_recommendations(
+        members, top_n=top_n, filters=filters, strategy=strategy
+    )
+
+    avg_emotions = {}
+    spread_emotions = {}
+    for e in EMOTIONS:
+        vals = [float(m["emotions"].get(e, 0)) for m in members]
+        avg_emotions[e] = round(sum(vals) / len(vals), 2)
+        if len(vals) > 1:
+            mean = avg_emotions[e]
+            std = (sum((v - mean)**2 for v in vals) / len(vals)) ** 0.5
+            spread_emotions[e] = round(std, 2)
+
+    result_data = {
+        "recommendations": recommendations,
+        "group_size": len(members),
+        "top_n": top_n,
+        "strategy": strategy,
+        "strategy_label": STRATEGY_LABELS.get(strategy, strategy),
+        "group_avg_emotions": avg_emotions,
+        "group_emotion_spread": spread_emotions,
+        "filters_applied": filters,
+    }
+
+    with rooms_lock:
+        room = ROOMS.get(room_id)
+        if room:
+            room["results"] = result_data
+
+    return jsonify({"ok": True, "results": result_data})
 
 
 # ─────────────────────────────────────────────

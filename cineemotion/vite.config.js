@@ -5,12 +5,14 @@ import react from "@vitejs/plugin-react";
 export default defineConfig({
   plugins: [react()],
   server: {
+    host: "0.0.0.0", // accessible from LAN
     proxy: {
       "/health": "http://localhost:5000",
       "/recommend": "http://localhost:5000",
       "/movies": "http://localhost:5000",
       "/posters": "http://localhost:5000",
       "/posters-debug": "http://localhost:5000",
+      "/rooms": "http://localhost:5000",
     },
   },
 });
